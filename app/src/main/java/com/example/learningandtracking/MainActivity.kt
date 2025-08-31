@@ -3,27 +3,10 @@ package com.example.learningandtracking
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.learningandtracking.data.*
+import com.example.learningandtracking.ui.screens.*
 import com.example.learningandtracking.ui.theme.LearningAndTrackingTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,56 +14,125 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             LearningAndTrackingTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    WelcomeScreen()
-                }
+                LearningTrackerApp()
             }
         }
     }
 }
 
 @Composable
-fun WelcomeScreen() {
-    val gradientColors = listOf(
-        Color(0xFF1E3C72),
-        Color(0xFF2A5298)
-    )
+fun LearningTrackerApp() {
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
+    var childProfile by remember { mutableStateOf(ChildProfile("")) }
+    var learningItems by remember { mutableStateOf(getSampleLearningItems()) }
+    var showPerformance by remember { mutableStateOf(false) }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(gradientColors)),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            modifier = Modifier
-                .padding(24.dp)
-                .shadow(16.dp, RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f))
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp, vertical = 32.dp)
-                    .fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Welcome to Learning and Tracking app !",
-                    fontSize = 26.sp,
-                    lineHeight = 32.sp,
-                    textAlign = TextAlign.Center,
-                    color = Color(0xFF0F172A),
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Let\'s start your journey.",
-                    modifier = Modifier.padding(top = 12.dp),
-                    fontSize = 16.sp,
-                    color = Color(0xFF334155)
-                )
-            }
+    when (val screen = currentScreen) {
+        Screen.Home -> {
+            HomeScreen(
+                onProfileClick = { currentScreen = Screen.Profile },
+                onItemClick = { clickedItem ->
+                    currentScreen = Screen.ItemDetail(clickedItem)
+                },
+                learningItems = learningItems,
+                onItemCompleted = { completedItem ->
+                    val updatedItems = learningItems.map { 
+                        if (it.id == completedItem.id) completedItem.copy(isCompleted = true, completedAt = System.currentTimeMillis()) else it
+                    }
+                    learningItems = updatedItems
+                }
+            )
+        }
+        Screen.Profile -> {
+            ProfileScreen(
+                profile = childProfile,
+                onSave = { profile ->
+                    childProfile = profile
+                    currentScreen = Screen.Home
+                },
+                onBack = { currentScreen = Screen.Home }
+            )
+        }
+        is Screen.ItemDetail -> {
+            ItemDetailScreen(
+                item = screen.item,
+                onMarkCompleted = { completedItem ->
+                    val updatedItems = learningItems.map { 
+                        if (it.id == completedItem.id) completedItem.copy(isCompleted = true, completedAt = System.currentTimeMillis()) else it
+                    }
+                    learningItems = updatedItems
+                    currentScreen = Screen.Home
+                },
+                onBack = { currentScreen = Screen.Home }
+            )
         }
     }
+
+    // Show performance screen if needed
+    if (showPerformance) {
+        PerformanceScreen(
+            performance = calculatePerformance(learningItems),
+            onClose = { showPerformance = false }
+        )
+    }
+}
+
+sealed class Screen {
+    object Home : Screen()
+    object Profile : Screen()
+    data class ItemDetail(val item: LearningItem) : Screen()
+}
+
+fun calculatePerformance(items: List<LearningItem>): PerformanceRating {
+    val completed = items.count { it.isCompleted }
+    val total = items.size
+    val percentage = if (total > 0) completed.toFloat() / total else 0f
+    
+    val stars = when {
+        percentage >= 0.8f -> 5
+        percentage >= 0.6f -> 4
+        percentage >= 0.4f -> 3
+        percentage >= 0.2f -> 2
+        else -> 1
+    }
+    
+    val message = when (stars) {
+        5 -> "Excellent!"
+        4 -> "Good Job!"
+        3 -> "Average"
+        2 -> "Poor"
+        else -> "Very Poor"
+    }
+    
+    return PerformanceRating(stars, message, percentage)
+}
+
+fun getSampleLearningItems(): List<LearningItem> {
+    return listOf(
+        LearningItem(
+            id = "1",
+            title = "English Words - Lesson 1",
+            category = LearningCategory.ENGLISH_WORDS,
+            timeSlot = TimeSlot.MORNING
+        ),
+        LearningItem(
+            id = "2",
+            title = "Surah Al-Fatiha",
+            category = LearningCategory.SURAHS,
+            timeSlot = TimeSlot.AFTERNOON
+        ),
+        LearningItem(
+            id = "3",
+            title = "Arabic Words - Colors",
+            category = LearningCategory.ARABIC_WORDS,
+            timeSlot = TimeSlot.EVENING
+        ),
+        LearningItem(
+            id = "4",
+            title = "Poem - Nature",
+            category = LearningCategory.POEMS,
+            timeSlot = TimeSlot.NIGHT
+        )
+    )
 }
 
